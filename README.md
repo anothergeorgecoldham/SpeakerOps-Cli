@@ -58,6 +58,10 @@ SpeakerOps writes a plain text audit log to `.speakerops/audit.log`. The log rec
 
 When a generated artefact already exists, SpeakerOps asks before overwriting it. The default answer is No, and approval decisions are written to the audit log.
 
+## Tool allowlisting
+
+SpeakerOps routes talk workflow actions through a small internal tool allowlist. Registered tools include talk file reads and writes, talk file listing, CFP generation, outline generation, research, and review; unregistered tool calls are denied and logged.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.

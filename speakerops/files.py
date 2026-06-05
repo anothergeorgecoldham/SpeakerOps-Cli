@@ -10,6 +10,7 @@ import yaml
 
 from speakerops.audit import AuditLogger
 from speakerops.approval import ApprovalGate
+from speakerops.tools import ToolAllowlist
 
 
 MARKDOWN_FILES = ["idea.md", "research.md", "cfp.md", "outline.md", "review.md"]
@@ -78,6 +79,9 @@ class WorkspacePolicy:
         self._log(action, requested_path, "allowed")
         return True
 
+    def list_files(self) -> list[str]:
+        return sorted(path.name for path in self.talk_dir.iterdir() if path.is_file())
+
     def _log(self, action: str, target: str | Path, result: str) -> None:
         if self.audit_logger:
             self.audit_logger.log(action, target, result)
@@ -137,7 +141,8 @@ def initial_markdown(title: str) -> dict[str, str]:
     }
 
 
-def load_talk_context(policy: WorkspacePolicy) -> tuple[dict[str, Any], dict[str, str]]:
-    talk = policy.read_yaml("talk.yaml")
-    markdown = {name: policy.read_text_if_exists(name) for name in MARKDOWN_FILES}
+def load_talk_context(tools: ToolAllowlist) -> tuple[dict[str, Any], dict[str, str]]:
+    tools.execute("list_talk_files")
+    talk = tools.execute("read_talk_file", "talk.yaml", as_yaml=True)
+    markdown = {name: tools.execute("read_talk_file", name) for name in MARKDOWN_FILES}
     return talk, markdown

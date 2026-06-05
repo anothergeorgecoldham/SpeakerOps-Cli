@@ -22,6 +22,7 @@ from speakerops.files import (
 )
 from speakerops.llm import create_llm_client
 from speakerops.prompts import chat_prompt, cfp_prompt, context_block, outline_prompt, research_prompt, review_prompt, system_prompt
+from speakerops.tools import ToolAllowlist, ToolNotAllowed
 from speakerops.web import DuckDuckGoSearchClient, format_results
 
 
@@ -101,7 +102,7 @@ def new(
 def chat(talk_path: Path) -> None:
     """Start an interactive ideation session for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, policy = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     transcript: list[str] = []
@@ -128,7 +129,7 @@ def chat(talk_path: Path) -> None:
             summary = llm.complete(system_prompt(), chat_prompt(context_block(profile, talk, markdown), "\n".join(transcript), summary_prompt))
             saved_at = utc_timestamp()
             notes = f"\n\n## Chat Notes - {saved_at}\n\n{summary}\n"
-            policy.append_text("idea.md", notes)
+            tools.execute("write_talk_file", "idea.md", notes, append=True)
             markdown["idea.md"] = markdown.get("idea.md", "") + notes
             console.print("[green]Saved session notes to idea.md[/green]")
             continue
@@ -143,7 +144,7 @@ def chat(talk_path: Path) -> None:
 def research(talk_path: Path) -> None:
     """Gather supporting research for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, policy = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     query = " ".join(
@@ -158,46 +159,42 @@ def research(talk_path: Path) -> None:
     )
     results = DuckDuckGoSearchClient().search(query)
     content = llm.complete(system_prompt(), research_prompt(context_block(profile, talk, markdown), format_results(results)))
-    if not policy.write_text("research.md", content, require_approval=True):
+    if not tools.execute("run_research", "research.md", content):
         console.print("[yellow]Skipped:[/yellow] research.md")
         return
-    policy.audit_logger.log("research", "research.md", "completed")
     console.print("[bold green]Generated:[/bold green] research.md")
 
 
 @generate_app.command()
 def cfp(talk_path: Path) -> None:
     """Generate or update cfp.md."""
-    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), cfp_prompt(context_block(profile, talk, markdown)))
-    if not policy.write_text("cfp.md", content, require_approval=True):
+    if not tools.execute("generate_cfp", "cfp.md", content):
         console.print("[yellow]Skipped:[/yellow] cfp.md")
         return
-    policy.audit_logger.log("generate_cfp", "cfp.md", "completed")
     console.print("[bold green]Generated:[/bold green] cfp.md")
 
 
 @generate_app.command()
 def outline(talk_path: Path) -> None:
     """Generate or update outline.md."""
-    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), outline_prompt(context_block(profile, talk, markdown)))
-    if not policy.write_text("outline.md", content, require_approval=True):
+    if not tools.execute("generate_outline", "outline.md", content):
         console.print("[yellow]Skipped:[/yellow] outline.md")
         return
-    policy.audit_logger.log("generate_outline", "outline.md", "completed")
     console.print("[bold green]Generated:[/bold green] outline.md")
 
 
 @app.command()
 def review(talk_path: Path) -> None:
     """Review the current talk package."""
-    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), review_prompt(context_block(profile, talk, markdown)))
-    if not policy.write_text("review.md", content, require_approval=True):
+    if not tools.execute("run_review", "review.md", content):
         console.print("[yellow]Skipped:[/yellow] review.md")
         return
-    policy.audit_logger.log("review", "review.md", "completed")
     console.print("[bold green]Generated:[/bold green] review.md")
     summary = _first_non_empty_lines(content, count=4)
     if summary:
@@ -206,10 +203,10 @@ def review(talk_path: Path) -> None:
 
 def _generation_inputs(talk_path: Path):
     profile = _profile_or_exit()
-    talk, markdown, policy = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
-    return profile, talk, markdown, llm, policy
+    return profile, talk, markdown, llm, tools
 
 
 def _profile_or_exit() -> dict:
@@ -224,11 +221,31 @@ def _talk_or_exit(talk_path: Path):
     try:
         audit_logger = AuditLogger()
         policy = WorkspacePolicy(talk_path, audit_logger, ApprovalGate(audit_logger))
-        talk, markdown = load_talk_context(policy)
-        return talk, markdown, policy
-    except (FileNotFoundError, PolicyViolation, ValueError) as exc:
+        tools = _tool_allowlist(policy, audit_logger)
+        talk, markdown = load_talk_context(tools)
+        return talk, markdown, tools
+    except (FileNotFoundError, PolicyViolation, ToolNotAllowed, ValueError) as exc:
         console.print(f"[red]Could not load talk at {talk_path}: {exc}[/red]")
         raise typer.Exit(1) from exc
+
+
+def _tool_allowlist(policy: WorkspacePolicy, audit_logger: AuditLogger) -> ToolAllowlist:
+    tools = ToolAllowlist(audit_logger)
+    tools.register("read_talk_file", lambda target, as_yaml=False: policy.read_yaml(target) if as_yaml else policy.read_text_if_exists(target))
+    tools.register("write_talk_file", lambda target, content, append=False, require_approval=False: policy.append_text(target, content) if append else policy.write_text(target, content, require_approval=require_approval))
+    tools.register("list_talk_files", policy.list_files)
+    tools.register("generate_cfp", lambda target, content: _write_generated_tool(tools, audit_logger, "generate_cfp", target, content))
+    tools.register("generate_outline", lambda target, content: _write_generated_tool(tools, audit_logger, "generate_outline", target, content))
+    tools.register("run_research", lambda target, content: _write_generated_tool(tools, audit_logger, "research", target, content))
+    tools.register("run_review", lambda target, content: _write_generated_tool(tools, audit_logger, "review", target, content))
+    return tools
+
+
+def _write_generated_tool(tools: ToolAllowlist, audit_logger: AuditLogger, action: str, target: str, content: str) -> bool:
+    if not tools.execute("write_talk_file", target, content, require_approval=True):
+        return False
+    audit_logger.log(action, target, "completed")
+    return True
 
 
 def _print_context_summary(profile: dict, talk: dict, markdown: dict[str, str]) -> None:
