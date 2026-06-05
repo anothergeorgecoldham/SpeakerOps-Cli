@@ -4,8 +4,11 @@ from typing import Any
 
 import yaml
 
+from speakerops.audit import AuditLogger
+from speakerops.content import prepare_content
 
-def context_block(profile: dict[str, Any], talk: dict[str, Any], markdown: dict[str, str]) -> str:
+
+def context_block(profile: dict[str, Any], talk: dict[str, Any], markdown: dict[str, str], audit_logger: AuditLogger | None = None) -> str:
     sections = [
         "## Speaker profile",
         yaml.safe_dump(profile, sort_keys=False, allow_unicode=True),
@@ -14,7 +17,7 @@ def context_block(profile: dict[str, Any], talk: dict[str, Any], markdown: dict[
     ]
     for name, content in markdown.items():
         if content.strip():
-            sections.extend([f"## Existing {name}", content])
+            sections.extend([f"## Existing {name}", prepare_content(name, content, audit_logger)])
     return "\n\n".join(sections)
 
 

@@ -74,6 +74,10 @@ Workspace file access also checks the `paths.deny` patterns in `.speakerops/spea
 
 Generated artefacts are written to `.preview` files first. SpeakerOps shows the target, preview path, and a unified diff when the target already exists, then asks whether to apply the preview. Denied previews are kept for review and the original file is left unchanged.
 
+## Trusted and untrusted content
+
+SpeakerOps treats configuration, policy, talk metadata, built-in prompts, and user commands as trusted instructions. Web results, research notes, imported Markdown, copied CFP pages, downloaded pages, and uploaded documents are treated as untrusted source material, wrapped before model use, and logged in the audit log.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.
