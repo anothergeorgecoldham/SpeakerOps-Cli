@@ -1,0 +1,19 @@
+# Python build and cache output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local SpeakerOps runtime state
+.speakerops/
+talks/
+
+# Local environment files
+.env
+.env.*
