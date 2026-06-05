@@ -50,6 +50,10 @@ SPEAKEROPS_MODEL=
 
 The MVP includes a simple provider abstraction. It can call GitHub Models or OpenAI-compatible chat completions when credentials are available, and falls back to a local deterministic draft generator when they are not.
 
+## Audit logging
+
+SpeakerOps writes a plain text audit log to `.speakerops/audit.log`. The log records talk file reads, writes, creates, policy denials, and high-level actions such as research, CFP generation, outline generation, and review.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.

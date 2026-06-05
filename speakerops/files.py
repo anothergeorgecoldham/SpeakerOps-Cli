@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from speakerops.audit import AuditLogger
+
 
 MARKDOWN_FILES = ["idea.md", "research.md", "cfp.md", "outline.md", "review.md"]
 
@@ -17,8 +19,9 @@ class PolicyViolation(Exception):
 
 
 class WorkspacePolicy:
-    def __init__(self, talk_dir: Path):
+    def __init__(self, talk_dir: Path, audit_logger: AuditLogger | None = None):
         self.talk_dir = talk_dir.resolve(strict=False)
+        self.audit_logger = audit_logger
 
     def resolve(self, requested_path: str | Path) -> Path:
         path = Path(requested_path)
@@ -27,20 +30,51 @@ class WorkspacePolicy:
         try:
             resolved.relative_to(self.talk_dir)
         except ValueError as exc:
+            self._log("policy_denied", requested_path, "denied")
             raise PolicyViolation(f"Path '{requested_path}' is outside talk workspace '{self.talk_dir}'.") from exc
         return resolved
 
     def read_yaml(self, requested_path: str | Path) -> dict[str, Any]:
-        return read_yaml(self.resolve(requested_path))
+        try:
+            resolved = self.resolve(requested_path)
+        except PolicyViolation:
+            self._log("file_read", requested_path, "denied")
+            raise
+        self._log("file_read", requested_path, "allowed")
+        return read_yaml(resolved)
 
     def read_text_if_exists(self, requested_path: str | Path) -> str:
-        return read_text_if_exists(self.resolve(requested_path))
+        try:
+            resolved = self.resolve(requested_path)
+        except PolicyViolation:
+            self._log("file_read", requested_path, "denied")
+            raise
+        self._log("file_read", requested_path, "allowed")
+        return read_text_if_exists(resolved)
 
     def write_text(self, requested_path: str | Path, content: str) -> None:
-        write_text(self.resolve(requested_path), content)
+        try:
+            resolved = self.resolve(requested_path)
+        except PolicyViolation:
+            self._log("file_write", requested_path, "denied")
+            raise
+        action = "file_write" if resolved.exists() else "file_create"
+        write_text(resolved, content)
+        self._log(action, requested_path, "allowed")
 
     def append_text(self, requested_path: str | Path, content: str) -> None:
-        append_text(self.resolve(requested_path), content)
+        try:
+            resolved = self.resolve(requested_path)
+        except PolicyViolation:
+            self._log("file_write", requested_path, "denied")
+            raise
+        action = "file_write" if resolved.exists() else "file_create"
+        append_text(resolved, content)
+        self._log(action, requested_path, "allowed")
+
+    def _log(self, action: str, target: str | Path, result: str) -> None:
+        if self.audit_logger:
+            self.audit_logger.log(action, target, result)
 
 
 def read_template(name: str) -> str:
