@@ -11,9 +11,9 @@ from speakerops.content import prepare_content
 def context_block(profile: dict[str, Any], talk: dict[str, Any], markdown: dict[str, str], audit_logger: AuditLogger | None = None) -> str:
     sections = [
         "## Speaker profile",
-        yaml.safe_dump(profile, sort_keys=False, allow_unicode=True),
+        prepare_content("speakerops.yaml", yaml.safe_dump(profile, sort_keys=False, allow_unicode=True), audit_logger),
         "## Talk metadata",
-        yaml.safe_dump(talk, sort_keys=False, allow_unicode=True),
+        prepare_content("talk.yaml", yaml.safe_dump(talk, sort_keys=False, allow_unicode=True), audit_logger),
     ]
     for name, content in markdown.items():
         if content.strip():

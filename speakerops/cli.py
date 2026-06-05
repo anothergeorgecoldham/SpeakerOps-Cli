@@ -11,7 +11,7 @@ from speakerops import __version__
 from speakerops.audit import AuditLogger
 from speakerops.approval import ApprovalGate
 from speakerops.config import init_profile, load_profile, model_settings, profile_path
-from speakerops.content import prepare_content
+from speakerops.content import ContentSource, TrustLevel, content_source, prepare_content
 from speakerops.files import (
     initial_markdown,
     load_talk_context,
@@ -142,7 +142,8 @@ def chat(talk_path: Path) -> None:
             continue
 
         context = context_block(profile, talk, markdown, tools.audit_logger)
-        response = llm.complete(system_prompt(), chat_prompt(context, "\n".join(transcript), message))
+        trusted_message = prepare_content("user_command", message, tools.audit_logger)
+        response = llm.complete(system_prompt(), chat_prompt(context, "\n".join(transcript), trusted_message))
         transcript.extend([f"you: {message}", f"assistant: {response}"])
         console.print(f"assistant> {response}")
 
@@ -207,11 +208,21 @@ def review(talk_path: Path) -> None:
     content = llm.complete(system_prompt(), review_prompt(context_block(profile, talk, markdown, tools.audit_logger)))
     if not tools.execute("run_review", "review.md", content):
         console.print("[yellow]Skipped:[/yellow] review.md")
+        _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
         return
     console.print("[bold green]Generated:[/bold green] review.md")
     summary = _first_non_empty_lines(content, count=4)
     if summary:
         console.print("\n".join(summary))
+    _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
+
+
+@app.command()
+def trust(talk_path: Path) -> None:
+    """Display trust classification for a talk."""
+    profile = _profile_or_exit()
+    talk, markdown, tools = _talk_or_exit(talk_path, profile)
+    _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
 
 
 @demo_app.command(name="prompt-injection")
@@ -328,6 +339,31 @@ def _first_non_empty_lines(content: str, count: int) -> list[str]:
         if len(lines) >= count:
             break
     return lines
+
+
+def _trust_sources(profile: dict, talk: dict, markdown: dict[str, str], audit_logger: AuditLogger) -> list[ContentSource]:
+    sources = [
+        content_source("speakerops.yaml", str(profile_path()), "", audit_logger),
+        content_source("talk.yaml", str(talk.get("slug", "talk")) + "/talk.yaml", "", audit_logger),
+    ]
+    for name, content in markdown.items():
+        if content.strip():
+            sources.append(content_source(name, name, content, audit_logger))
+    sources.append(content_source("web_result", "web search results", "", audit_logger))
+    return sources
+
+
+def _print_trust_summary(sources: list[ContentSource]) -> None:
+    trusted = [source for source in sources if source.trust_level == TrustLevel.TRUSTED]
+    untrusted = [source for source in sources if source.trust_level == TrustLevel.UNTRUSTED]
+
+    console.print("[bold]Trust Summary[/bold]")
+    console.print(f"Trusted Sources: {len(trusted)}")
+    for source in trusted:
+        console.print(f"- {source.source_type} ({source.origin})")
+    console.print(f"Untrusted Sources: {len(untrusted)}")
+    for source in untrusted:
+        console.print(f"- {source.source_type} ({source.origin})")
 
 
 def run() -> None:
