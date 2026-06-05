@@ -50,6 +50,45 @@ SPEAKEROPS_MODEL=
 
 The MVP includes a simple provider abstraction. It can call GitHub Models or OpenAI-compatible chat completions when credentials are available, and falls back to a local deterministic draft generator when they are not.
 
+## Using a real LLM
+
+SpeakerOps works without credentials by using a local draft fallback, but real model output requires either a GitHub Models token or an OpenAI API key.
+
+### Option 1: GitHub Models
+
+1. Read the GitHub Models documentation: <https://docs.github.com/en/github-models>
+2. Create a GitHub personal access token: <https://github.com/settings/tokens>
+3. Give the token access required for GitHub Models in your account or organization.
+4. Set the environment variables:
+
+```powershell
+$env:GITHUB_TOKEN="your-github-token"
+$env:SPEAKEROPS_MODEL_PROVIDER="github_models"
+$env:SPEAKEROPS_MODEL="openai/gpt-5-nano"
+```
+
+### Option 2: OpenAI
+
+1. Create or sign in to an OpenAI account: <https://platform.openai.com/>
+2. Create an API key: <https://platform.openai.com/api-keys>
+3. Check model availability and pricing before use: <https://platform.openai.com/docs/models>
+4. Set the environment variables:
+
+```powershell
+$env:OPENAI_API_KEY="your-openai-api-key"
+$env:SPEAKEROPS_MODEL_PROVIDER="openai"
+$env:SPEAKEROPS_MODEL="gpt-4o-mini"
+```
+
+### Check the active settings
+
+```powershell
+speakerops config
+speakerops generate cfp talks\securing-your-first-agentic-cli
+```
+
+Do not commit API keys or store them in generated talk files.
+
 ## Audit logging
 
 SpeakerOps writes a plain text audit log to `.speakerops/audit.log`. The log records talk file reads, writes, creates, policy denials, and high-level actions such as research, CFP generation, outline generation, and review.
