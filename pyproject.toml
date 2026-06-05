@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Unsafe MVP CLI for developing technical speaking artefacts."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
 dependencies = [
     "typer>=0.12",
     "rich>=13.7",

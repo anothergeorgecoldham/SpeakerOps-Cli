@@ -78,6 +78,10 @@ Generated artefacts are written to `.preview` files first. SpeakerOps shows the 
 
 SpeakerOps treats configuration, policy, talk metadata, built-in prompts, and user commands as trusted instructions. Web results, research notes, imported Markdown, copied CFP pages, downloaded pages, and uploaded documents are treated as untrusted source material, wrapped before model use, and logged in the audit log.
 
+## License
+
+SpeakerOps is licensed under the MIT License. See [LICENSE](LICENSE).
+
 ## Trust classification
 
 SpeakerOps tracks content sources as trusted or untrusted using simple rules. Run `speakerops trust <talk-folder>` to see trusted sources, untrusted sources, counts, and origins for a talk. The review command also prints a trust summary.
