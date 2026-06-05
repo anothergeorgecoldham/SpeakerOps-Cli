@@ -54,3 +54,12 @@ point_of_view:
 
 model_provider: github_models
 model: openai/gpt-5-nano
+
+network:
+  mode: allowlist
+  allowed_domains:
+    - learn.microsoft.com
+    - docs.github.com
+    - nist.gov
+    - mitre.org
+    - owasp.org

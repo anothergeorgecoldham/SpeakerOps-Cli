@@ -5,6 +5,8 @@ from typing import Any
 
 import requests
 
+from speakerops.network import NetworkPolicy, NetworkPolicyViolation
+
 
 @dataclass(frozen=True)
 class SearchResult:
@@ -19,10 +21,16 @@ class WebSearchClient:
 
 
 class DuckDuckGoSearchClient(WebSearchClient):
+    def __init__(self, network_policy: NetworkPolicy | None = None):
+        self.network_policy = network_policy
+
     def search(self, query: str) -> list[SearchResult]:
+        url = "https://api.duckduckgo.com/"
+        if self.network_policy:
+            self.network_policy.check_url(url)
         params = {"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"}
         try:
-            response = requests.get("https://api.duckduckgo.com/", params=params, timeout=20)
+            response = requests.get(url, params=params, timeout=20)
             response.raise_for_status()
             data = response.json()
         except (requests.RequestException, ValueError):
@@ -44,6 +52,17 @@ class DuckDuckGoSearchClient(WebSearchClient):
                 break
 
         return results or fallback_results(query)
+
+
+def denied_results(query: str, exc: NetworkPolicyViolation) -> list[SearchResult]:
+    return [
+        SearchResult(
+            title="Network request denied by policy",
+            url="",
+            summary=f"{exc} Research for '{query}' used the local fallback references instead.",
+        ),
+        *fallback_results(query),
+    ]
 
 
 def _flatten_related(items: list[Any]) -> list[dict[str, Any]]:

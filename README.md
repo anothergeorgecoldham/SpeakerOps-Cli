@@ -62,6 +62,10 @@ When a generated artefact already exists, SpeakerOps asks before overwriting it.
 
 SpeakerOps routes talk workflow actions through a small internal tool allowlist. Registered tools include talk file reads and writes, talk file listing, CFP generation, outline generation, research, and review; unregistered tool calls are denied and logged.
 
+## Network allowlisting
+
+Research network requests are checked against the `network` section in `.speakerops/speakerops.yaml`. In `allowlist` mode, requests are only allowed for configured domains, and allowed or denied requests are written to the audit log.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.

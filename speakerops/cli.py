@@ -21,9 +21,10 @@ from speakerops.files import (
     write_yaml,
 )
 from speakerops.llm import create_llm_client
+from speakerops.network import NetworkPolicy, NetworkPolicyViolation
 from speakerops.prompts import chat_prompt, cfp_prompt, context_block, outline_prompt, research_prompt, review_prompt, system_prompt
 from speakerops.tools import ToolAllowlist, ToolNotAllowed
-from speakerops.web import DuckDuckGoSearchClient, format_results
+from speakerops.web import denied_results, DuckDuckGoSearchClient, format_results
 
 
 app = typer.Typer(help="SpeakerOps unsafe MVP CLI.")
@@ -157,7 +158,12 @@ def research(talk_path: Path) -> None:
         ]
         if part
     )
-    results = DuckDuckGoSearchClient().search(query)
+    network_policy = NetworkPolicy.from_config(profile.get("network"), tools.audit_logger)
+    try:
+        results = DuckDuckGoSearchClient(network_policy).search(query)
+    except NetworkPolicyViolation as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        results = denied_results(query, exc)
     content = llm.complete(system_prompt(), research_prompt(context_block(profile, talk, markdown), format_results(results)))
     if not tools.execute("run_research", "research.md", content):
         console.print("[yellow]Skipped:[/yellow] research.md")
