@@ -63,3 +63,15 @@ network:
     - nist.gov
     - mitre.org
     - owasp.org
+
+paths:
+  deny:
+    - ".env"
+    - ".env.*"
+    - "*.pem"
+    - "*.key"
+    - "id_rsa"
+    - "id_ed25519"
+    - ".ssh/*"
+    - ".git/config"
+    - ".git-credentials"

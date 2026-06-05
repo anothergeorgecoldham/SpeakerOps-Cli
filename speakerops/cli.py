@@ -27,6 +27,8 @@ from speakerops.tools import ToolAllowlist, ToolNotAllowed
 from speakerops.web import denied_results, DuckDuckGoSearchClient, format_results
 
 
+DEFAULT_DENIED_PATHS = [".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519", ".ssh/*", ".git/config", ".git-credentials"]
+
 app = typer.Typer(help="SpeakerOps unsafe MVP CLI.")
 generate_app = typer.Typer(help="Generate talk artefacts.")
 app.add_typer(generate_app, name="generate")
@@ -103,7 +105,7 @@ def new(
 def chat(talk_path: Path) -> None:
     """Start an interactive ideation session for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path, profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     transcript: list[str] = []
@@ -145,7 +147,7 @@ def chat(talk_path: Path) -> None:
 def research(talk_path: Path) -> None:
     """Gather supporting research for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path, profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     query = " ".join(
@@ -209,7 +211,7 @@ def review(talk_path: Path) -> None:
 
 def _generation_inputs(talk_path: Path):
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path)
+    talk, markdown, tools = _talk_or_exit(talk_path, profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     return profile, talk, markdown, llm, tools
@@ -223,16 +225,26 @@ def _profile_or_exit() -> dict:
         raise typer.Exit(1) from exc
 
 
-def _talk_or_exit(talk_path: Path):
+def _talk_or_exit(talk_path: Path, profile: dict):
     try:
         audit_logger = AuditLogger()
-        policy = WorkspacePolicy(talk_path, audit_logger, ApprovalGate(audit_logger))
+        policy = WorkspacePolicy(talk_path, audit_logger, ApprovalGate(audit_logger), _denied_paths(profile))
         tools = _tool_allowlist(policy, audit_logger)
         talk, markdown = load_talk_context(tools)
         return talk, markdown, tools
     except (FileNotFoundError, PolicyViolation, ToolNotAllowed, ValueError) as exc:
         console.print(f"[red]Could not load talk at {talk_path}: {exc}[/red]")
         raise typer.Exit(1) from exc
+
+
+def _denied_paths(profile: dict) -> list[str]:
+    paths = profile.get("paths")
+    if not isinstance(paths, dict):
+        return DEFAULT_DENIED_PATHS
+    denied = paths.get("deny")
+    if not isinstance(denied, list):
+        return DEFAULT_DENIED_PATHS
+    return [str(pattern) for pattern in denied]
 
 
 def _tool_allowlist(policy: WorkspacePolicy, audit_logger: AuditLogger) -> ToolAllowlist:

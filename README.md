@@ -66,6 +66,10 @@ SpeakerOps routes talk workflow actions through a small internal tool allowlist.
 
 Research network requests are checked against the `network` section in `.speakerops/speakerops.yaml`. In `allowlist` mode, requests are only allowed for configured domains, and allowed or denied requests are written to the audit log.
 
+## Sensitive path denylisting
+
+Workspace file access also checks the `paths.deny` patterns in `.speakerops/speakerops.yaml`. Sensitive paths such as environment files, private keys, SSH material, and Git credential files are denied even when they are inside the selected talk folder.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.

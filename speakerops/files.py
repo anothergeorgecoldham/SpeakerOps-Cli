@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from fnmatch import fnmatchcase
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -21,10 +22,17 @@ class PolicyViolation(Exception):
 
 
 class WorkspacePolicy:
-    def __init__(self, talk_dir: Path, audit_logger: AuditLogger | None = None, approval_gate: ApprovalGate | None = None):
+    def __init__(
+        self,
+        talk_dir: Path,
+        audit_logger: AuditLogger | None = None,
+        approval_gate: ApprovalGate | None = None,
+        denied_patterns: list[str] | None = None,
+    ):
         self.talk_dir = talk_dir.resolve(strict=False)
         self.audit_logger = audit_logger
         self.approval_gate = approval_gate
+        self.denied_patterns = denied_patterns or []
 
     def resolve(self, requested_path: str | Path) -> Path:
         path = Path(requested_path)
@@ -35,6 +43,10 @@ class WorkspacePolicy:
         except ValueError as exc:
             self._log("policy_denied", requested_path, "denied")
             raise PolicyViolation(f"Path '{requested_path}' is outside talk workspace '{self.talk_dir}'.") from exc
+        relative_path = resolved.relative_to(self.talk_dir).as_posix()
+        if self._is_denied(relative_path):
+            self._log("policy_denied", requested_path, "denied")
+            raise PolicyViolation(f"Path '{requested_path}' is denied by workspace policy.")
         return resolved
 
     def read_yaml(self, requested_path: str | Path) -> dict[str, Any]:
@@ -85,6 +97,11 @@ class WorkspacePolicy:
     def _log(self, action: str, target: str | Path, result: str) -> None:
         if self.audit_logger:
             self.audit_logger.log(action, target, result)
+
+    def _is_denied(self, relative_path: str) -> bool:
+        relative = relative_path.lower()
+        name = Path(relative).name
+        return any(fnmatchcase(relative, pattern.lower()) or fnmatchcase(name, pattern.lower()) for pattern in self.denied_patterns)
 
 
 def read_template(name: str) -> str:
