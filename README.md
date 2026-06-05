@@ -54,6 +54,10 @@ The MVP includes a simple provider abstraction. It can call GitHub Models or Ope
 
 SpeakerOps writes a plain text audit log to `.speakerops/audit.log`. The log records talk file reads, writes, creates, policy denials, and high-level actions such as research, CFP generation, outline generation, and review.
 
+## Overwrite approval
+
+When a generated artefact already exists, SpeakerOps asks before overwriting it. The default answer is No, and approval decisions are written to the audit log.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.

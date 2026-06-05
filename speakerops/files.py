@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from speakerops.audit import AuditLogger
+from speakerops.approval import ApprovalGate
 
 
 MARKDOWN_FILES = ["idea.md", "research.md", "cfp.md", "outline.md", "review.md"]
@@ -19,9 +20,10 @@ class PolicyViolation(Exception):
 
 
 class WorkspacePolicy:
-    def __init__(self, talk_dir: Path, audit_logger: AuditLogger | None = None):
+    def __init__(self, talk_dir: Path, audit_logger: AuditLogger | None = None, approval_gate: ApprovalGate | None = None):
         self.talk_dir = talk_dir.resolve(strict=False)
         self.audit_logger = audit_logger
+        self.approval_gate = approval_gate
 
     def resolve(self, requested_path: str | Path) -> Path:
         path = Path(requested_path)
@@ -52,17 +54,20 @@ class WorkspacePolicy:
         self._log("file_read", requested_path, "allowed")
         return read_text_if_exists(resolved)
 
-    def write_text(self, requested_path: str | Path, content: str) -> None:
+    def write_text(self, requested_path: str | Path, content: str, require_approval: bool = False) -> bool:
         try:
             resolved = self.resolve(requested_path)
         except PolicyViolation:
             self._log("file_write", requested_path, "denied")
             raise
+        if require_approval and resolved.exists() and self.approval_gate and not self.approval_gate.confirm_overwrite(requested_path):
+            return False
         action = "file_write" if resolved.exists() else "file_create"
         write_text(resolved, content)
         self._log(action, requested_path, "allowed")
+        return True
 
-    def append_text(self, requested_path: str | Path, content: str) -> None:
+    def append_text(self, requested_path: str | Path, content: str) -> bool:
         try:
             resolved = self.resolve(requested_path)
         except PolicyViolation:
@@ -71,6 +76,7 @@ class WorkspacePolicy:
         action = "file_write" if resolved.exists() else "file_create"
         append_text(resolved, content)
         self._log(action, requested_path, "allowed")
+        return True
 
     def _log(self, action: str, target: str | Path, result: str) -> None:
         if self.audit_logger:

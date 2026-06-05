@@ -8,6 +8,7 @@ from rich.table import Table
 
 from speakerops import __version__
 from speakerops.audit import AuditLogger
+from speakerops.approval import ApprovalGate
 from speakerops.config import init_profile, load_profile, model_settings, profile_path
 from speakerops.files import (
     initial_markdown,
@@ -157,7 +158,9 @@ def research(talk_path: Path) -> None:
     )
     results = DuckDuckGoSearchClient().search(query)
     content = llm.complete(system_prompt(), research_prompt(context_block(profile, talk, markdown), format_results(results)))
-    policy.write_text("research.md", content)
+    if not policy.write_text("research.md", content, require_approval=True):
+        console.print("[yellow]Skipped:[/yellow] research.md")
+        return
     policy.audit_logger.log("research", "research.md", "completed")
     console.print("[bold green]Generated:[/bold green] research.md")
 
@@ -167,7 +170,9 @@ def cfp(talk_path: Path) -> None:
     """Generate or update cfp.md."""
     profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), cfp_prompt(context_block(profile, talk, markdown)))
-    policy.write_text("cfp.md", content)
+    if not policy.write_text("cfp.md", content, require_approval=True):
+        console.print("[yellow]Skipped:[/yellow] cfp.md")
+        return
     policy.audit_logger.log("generate_cfp", "cfp.md", "completed")
     console.print("[bold green]Generated:[/bold green] cfp.md")
 
@@ -177,7 +182,9 @@ def outline(talk_path: Path) -> None:
     """Generate or update outline.md."""
     profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), outline_prompt(context_block(profile, talk, markdown)))
-    policy.write_text("outline.md", content)
+    if not policy.write_text("outline.md", content, require_approval=True):
+        console.print("[yellow]Skipped:[/yellow] outline.md")
+        return
     policy.audit_logger.log("generate_outline", "outline.md", "completed")
     console.print("[bold green]Generated:[/bold green] outline.md")
 
@@ -187,7 +194,9 @@ def review(talk_path: Path) -> None:
     """Review the current talk package."""
     profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), review_prompt(context_block(profile, talk, markdown)))
-    policy.write_text("review.md", content)
+    if not policy.write_text("review.md", content, require_approval=True):
+        console.print("[yellow]Skipped:[/yellow] review.md")
+        return
     policy.audit_logger.log("review", "review.md", "completed")
     console.print("[bold green]Generated:[/bold green] review.md")
     summary = _first_non_empty_lines(content, count=4)
@@ -213,7 +222,8 @@ def _profile_or_exit() -> dict:
 
 def _talk_or_exit(talk_path: Path):
     try:
-        policy = WorkspacePolicy(talk_path, AuditLogger())
+        audit_logger = AuditLogger()
+        policy = WorkspacePolicy(talk_path, audit_logger, ApprovalGate(audit_logger))
         talk, markdown = load_talk_context(policy)
         return talk, markdown, policy
     except (FileNotFoundError, PolicyViolation, ValueError) as exc:
