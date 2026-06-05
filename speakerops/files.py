@@ -91,6 +91,11 @@ class WorkspacePolicy:
         self._log(action, requested_path, "allowed")
         return True
 
+    def delete_file(self, requested_path: str | Path) -> None:
+        resolved = self.resolve(requested_path)
+        if resolved.exists():
+            resolved.unlink()
+
     def list_files(self) -> list[str]:
         return sorted(path.name for path in self.talk_dir.iterdir() if path.is_file())
 

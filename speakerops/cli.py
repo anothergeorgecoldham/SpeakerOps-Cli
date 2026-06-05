@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from difflib import unified_diff
 from pathlib import Path
 
 import typer
@@ -252,16 +253,44 @@ def _tool_allowlist(policy: WorkspacePolicy, audit_logger: AuditLogger) -> ToolA
     tools.register("read_talk_file", lambda target, as_yaml=False: policy.read_yaml(target) if as_yaml else policy.read_text_if_exists(target))
     tools.register("write_talk_file", lambda target, content, append=False, require_approval=False: policy.append_text(target, content) if append else policy.write_text(target, content, require_approval=require_approval))
     tools.register("list_talk_files", policy.list_files)
-    tools.register("generate_cfp", lambda target, content: _write_generated_tool(tools, audit_logger, "generate_cfp", target, content))
-    tools.register("generate_outline", lambda target, content: _write_generated_tool(tools, audit_logger, "generate_outline", target, content))
-    tools.register("run_research", lambda target, content: _write_generated_tool(tools, audit_logger, "research", target, content))
-    tools.register("run_review", lambda target, content: _write_generated_tool(tools, audit_logger, "review", target, content))
+    tools.register("generate_cfp", lambda target, content: _write_generated_tool(tools, policy, audit_logger, "generate_cfp", target, content))
+    tools.register("generate_outline", lambda target, content: _write_generated_tool(tools, policy, audit_logger, "generate_outline", target, content))
+    tools.register("run_research", lambda target, content: _write_generated_tool(tools, policy, audit_logger, "research", target, content))
+    tools.register("run_review", lambda target, content: _write_generated_tool(tools, policy, audit_logger, "review", target, content))
     return tools
 
 
-def _write_generated_tool(tools: ToolAllowlist, audit_logger: AuditLogger, action: str, target: str, content: str) -> bool:
-    if not tools.execute("write_talk_file", target, content, require_approval=True):
+def _write_generated_tool(tools: ToolAllowlist, policy: WorkspacePolicy, audit_logger: AuditLogger, action: str, target: str, content: str) -> bool:
+    preview = f"{target}.preview"
+    target_exists = target in tools.execute("list_talk_files")
+    tools.execute("write_talk_file", preview, content)
+    audit_logger.log("preview_created", preview, "allowed")
+
+    console.print(f"Target: {target}")
+    console.print(f"Preview: {preview}")
+    console.print(f"Target exists: {'yes' if target_exists else 'no'}")
+    if target_exists:
+        existing = tools.execute("read_talk_file", target)
+        diff = "".join(
+            unified_diff(
+                existing.splitlines(keepends=True),
+                content.splitlines(keepends=True),
+                fromfile=target,
+                tofile=preview,
+            )
+        )
+        if diff:
+            console.print(diff)
+
+    answer = input(f"Apply generated changes to {target}? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        audit_logger.log("preview_apply", target, "denied")
         return False
+
+    if not tools.execute("write_talk_file", target, content):
+        return False
+    policy.delete_file(preview)
+    audit_logger.log("preview_apply", target, "approved")
     audit_logger.log(action, target, "completed")
     return True
 

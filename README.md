@@ -70,6 +70,10 @@ Research network requests are checked against the `network` section in `.speaker
 
 Workspace file access also checks the `paths.deny` patterns in `.speakerops/speakerops.yaml`. Sensitive paths such as environment files, private keys, SSH material, and Git credential files are denied even when they are inside the selected talk folder.
 
+## Review before write
+
+Generated artefacts are written to `.preview` files first. SpeakerOps shows the target, preview path, and a unified diff when the target already exists, then asks whether to apply the preview. Denied previews are kept for review and the original file is left unchanged.
+
 ## Current limitations
 
 - This is intentionally permissive and unsafe.
