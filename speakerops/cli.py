@@ -9,11 +9,12 @@ from rich.table import Table
 from speakerops import __version__
 from speakerops.config import init_profile, load_profile, model_settings, profile_path
 from speakerops.files import (
-    append_text,
     initial_markdown,
     load_talk_context,
+    PolicyViolation,
     slugify,
     utc_timestamp,
+    WorkspacePolicy,
     write_text,
     write_yaml,
 )
@@ -98,7 +99,7 @@ def new(
 def chat(talk_path: Path) -> None:
     """Start an interactive ideation session for a talk."""
     profile = _profile_or_exit()
-    talk, markdown = _talk_or_exit(talk_path)
+    talk, markdown, policy = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     transcript: list[str] = []
@@ -125,7 +126,7 @@ def chat(talk_path: Path) -> None:
             summary = llm.complete(system_prompt(), chat_prompt(context_block(profile, talk, markdown), "\n".join(transcript), summary_prompt))
             saved_at = utc_timestamp()
             notes = f"\n\n## Chat Notes - {saved_at}\n\n{summary}\n"
-            append_text(talk_path / "idea.md", notes)
+            policy.append_text("idea.md", notes)
             markdown["idea.md"] = markdown.get("idea.md", "") + notes
             console.print("[green]Saved session notes to idea.md[/green]")
             continue
@@ -140,7 +141,7 @@ def chat(talk_path: Path) -> None:
 def research(talk_path: Path) -> None:
     """Gather supporting research for a talk."""
     profile = _profile_or_exit()
-    talk, markdown = _talk_or_exit(talk_path)
+    talk, markdown, policy = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     query = " ".join(
@@ -155,34 +156,34 @@ def research(talk_path: Path) -> None:
     )
     results = DuckDuckGoSearchClient().search(query)
     content = llm.complete(system_prompt(), research_prompt(context_block(profile, talk, markdown), format_results(results)))
-    write_text(talk_path / "research.md", content)
+    policy.write_text("research.md", content)
     console.print("[bold green]Generated:[/bold green] research.md")
 
 
 @generate_app.command()
 def cfp(talk_path: Path) -> None:
     """Generate or update cfp.md."""
-    profile, talk, markdown, llm = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), cfp_prompt(context_block(profile, talk, markdown)))
-    write_text(talk_path / "cfp.md", content)
+    policy.write_text("cfp.md", content)
     console.print("[bold green]Generated:[/bold green] cfp.md")
 
 
 @generate_app.command()
 def outline(talk_path: Path) -> None:
     """Generate or update outline.md."""
-    profile, talk, markdown, llm = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), outline_prompt(context_block(profile, talk, markdown)))
-    write_text(talk_path / "outline.md", content)
+    policy.write_text("outline.md", content)
     console.print("[bold green]Generated:[/bold green] outline.md")
 
 
 @app.command()
 def review(talk_path: Path) -> None:
     """Review the current talk package."""
-    profile, talk, markdown, llm = _generation_inputs(talk_path)
+    profile, talk, markdown, llm, policy = _generation_inputs(talk_path)
     content = llm.complete(system_prompt(), review_prompt(context_block(profile, talk, markdown)))
-    write_text(talk_path / "review.md", content)
+    policy.write_text("review.md", content)
     console.print("[bold green]Generated:[/bold green] review.md")
     summary = _first_non_empty_lines(content, count=4)
     if summary:
@@ -191,10 +192,10 @@ def review(talk_path: Path) -> None:
 
 def _generation_inputs(talk_path: Path):
     profile = _profile_or_exit()
-    talk, markdown = _talk_or_exit(talk_path)
+    talk, markdown, policy = _talk_or_exit(talk_path)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
-    return profile, talk, markdown, llm
+    return profile, talk, markdown, llm, policy
 
 
 def _profile_or_exit() -> dict:
@@ -207,8 +208,10 @@ def _profile_or_exit() -> dict:
 
 def _talk_or_exit(talk_path: Path):
     try:
-        return load_talk_context(talk_path)
-    except (FileNotFoundError, ValueError) as exc:
+        policy = WorkspacePolicy(talk_path)
+        talk, markdown = load_talk_context(policy)
+        return talk, markdown, policy
+    except (FileNotFoundError, PolicyViolation, ValueError) as exc:
         console.print(f"[red]Could not load talk at {talk_path}: {exc}[/red]")
         raise typer.Exit(1) from exc
 

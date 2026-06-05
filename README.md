@@ -2,7 +2,9 @@
 
 SpeakerOps is a minimal Python CLI for helping technical speakers turn rough talk ideas into useful conference artefacts: ideation notes, research notes, CFP submissions, talk outlines, and review summaries.
 
-This is an early unsafe MVP. It intentionally does not include filesystem restrictions, path allowlisting, network allowlisting, approval gates, audit logging, sandboxing, or tool restrictions. Those controls are expected in a later security-focused stage.
+SpeakerOps started as an early unsafe MVP without filesystem restrictions, path allowlisting, network allowlisting, approval gates, audit logging, sandboxing, or tool restrictions. Those controls are expected to be added incrementally in later security-focused stages.
+
+Stage 2 adds workspace boundary protection so talk operations are restricted to the selected talk folder.
 
 ## Install
 
