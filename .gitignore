@@ -17,3 +17,4 @@ talks/
 # Local environment files
 .env
 .env.*
+api.key

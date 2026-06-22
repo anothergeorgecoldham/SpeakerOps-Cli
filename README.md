@@ -48,7 +48,7 @@ SPEAKEROPS_MODEL_PROVIDER=
 SPEAKEROPS_MODEL=
 ```
 
-The MVP includes a simple provider abstraction. It can call GitHub Models or OpenAI-compatible chat completions when credentials are available, and falls back to a local deterministic draft generator when they are not.
+The MVP includes a simple provider abstraction. It can call GitHub Models or OpenAI-compatible chat completions when credentials are available, and falls back to a local deterministic draft generator when they are not. For OpenAI, SpeakerOps uses `OPENAI_API_KEY` first and then falls back to a local `api.key` file in the project root.
 
 ## Using a real LLM
 
@@ -79,6 +79,8 @@ $env:OPENAI_API_KEY="your-openai-api-key"
 $env:SPEAKEROPS_MODEL_PROVIDER="openai"
 $env:SPEAKEROPS_MODEL="gpt-4o-mini"
 ```
+
+Alternatively, put the OpenAI API key in `api.key` at the project root. This file is ignored by Git.
 
 ### Check the active settings
 

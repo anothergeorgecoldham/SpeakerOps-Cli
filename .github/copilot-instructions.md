@@ -31,7 +31,7 @@
 - `speakerops.config` manages `.speakerops\speakerops.yaml`, model settings, and environment overrides. `speakerops init` writes the packaged profile template and creates `talks\`.
 - `speakerops.files` is the Markdown/YAML persistence layer. Generated talk workspaces use `talk.yaml` plus `idea.md`, `research.md`, `cfp.md`, `outline.md`, and `review.md`; these files are also the app's memory.
 - `speakerops.prompts` builds the prompt context by combining the speaker profile, talk metadata, and existing Markdown artefacts. Generation commands should go through these prompt helpers instead of duplicating prompt strings in the CLI.
-- `speakerops.llm` defines the `LLMClient` protocol. `create_llm_client()` selects GitHub Models, OpenAI, or the local deterministic fallback based on profile settings and environment variables.
+- `speakerops.llm` defines the `LLMClient` protocol. `create_llm_client()` selects GitHub Models, OpenAI, or the local deterministic fallback based on profile settings, environment variables, and the local `api.key` OpenAI fallback.
 - `speakerops.web` defines `WebSearchClient` and the current DuckDuckGo-backed implementation. `research` formats search results, then asks the LLM layer to write `research.md`.
 - YAML templates live under `speakerops\templates\` and are included as package data. Load them through `importlib.resources` via `read_template()` rather than filesystem-relative paths.
 
@@ -42,5 +42,5 @@
 - Use `pathlib.Path` and UTF-8 reads/writes via the helpers in `speakerops.files`.
 - Generation commands overwrite their target Markdown files without prompting. `chat /save` appends timestamped notes to `idea.md`.
 - Provider failures should degrade to the local draft fallback rather than preventing artefact generation.
-- Model configuration comes from `.speakerops\speakerops.yaml`, with `SPEAKEROPS_MODEL_PROVIDER` and `SPEAKEROPS_MODEL` taking precedence. Provider credentials come from `GITHUB_TOKEN` or `OPENAI_API_KEY`.
+- Model configuration comes from `.speakerops\speakerops.yaml`, with `SPEAKEROPS_MODEL_PROVIDER` and `SPEAKEROPS_MODEL` taking precedence. Provider credentials come from `GITHUB_TOKEN`, `OPENAI_API_KEY`, or project-root `api.key` for OpenAI.
 - Keep CLI output concise and Rich-formatted, matching the current command style.

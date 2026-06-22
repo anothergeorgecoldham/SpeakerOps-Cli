@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 import requests
@@ -79,7 +80,7 @@ def create_llm_client(provider: str, model: str) -> LLMClient:
                 fallback=fallback,
             )
     if normalized == "openai":
-        token = os.getenv("OPENAI_API_KEY")
+        token = _openai_api_key()
         if token:
             return ChatCompletionsClient(
                 provider="openai",
@@ -89,6 +90,20 @@ def create_llm_client(provider: str, model: str) -> LLMClient:
                 fallback=fallback,
             )
     return fallback
+
+
+def _openai_api_key() -> str | None:
+    token = os.getenv("OPENAI_API_KEY")
+    if token and token.strip():
+        return token.strip()
+
+    key_path = Path("api.key")
+    if key_path.exists():
+        file_token = key_path.read_text(encoding="utf-8").strip()
+        if file_token:
+            return file_token
+
+    return None
 
 
 def _field(prompt: str, name: str, default: str) -> str:
