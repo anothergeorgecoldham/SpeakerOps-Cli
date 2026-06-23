@@ -75,3 +75,9 @@ paths:
     - ".ssh/*"
     - ".git/config"
     - ".git-credentials"
+
+security:
+  hardened: true
+  allowed_operators: []
+  scan_generated_content: true
+  provenance_enabled: true

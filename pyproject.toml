@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "speakerops"
 version = "0.1.0"
-description = "Unsafe MVP CLI for developing technical speaking artefacts."
+description = "Early safety-focused CLI for developing technical speaking artefacts."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

@@ -164,6 +164,41 @@ paths.
 Writes are bounded to known talk artefacts through the internal tool allowlist
 and review-before-write flow.
 
+## Hardened controls
+
+SpeakerOps reads hardened control settings from `.speakerops/speakerops.yaml`:
+
+```yaml
+security:
+  hardened: true
+  allowed_operators: []
+  scan_generated_content: true
+  provenance_enabled: true
+```
+
+`allowed_operators` is empty by default, which logs the local operator but does
+not restrict usage. To restrict talk operations to specific local users, add the
+OS username or `SPEAKEROPS_OPERATOR` value:
+
+```yaml
+security:
+  allowed_operators:
+    - georgecoldham
+```
+
+Set `security.hardened` to `false` only for local experiments where you
+intentionally want to disable operator restrictions, generated-content secret
+scanning, and provenance records.
+
+Generated artefacts are scanned for likely secrets before previews are written.
+If a generated response appears to contain an API key, token, private key, or
+high-entropy secret-like value, SpeakerOps denies the write and logs the result.
+
+When generated content is approved, SpeakerOps writes a provenance record to
+`provenance.yaml` in the talk workspace. The record includes the timestamp,
+operator, action, target artefact, generated content hash, and hashes of the
+input talk files.
+
 ## Troubleshooting
 
 If `speakerops chat` appears idle, it is usually waiting for the model response.

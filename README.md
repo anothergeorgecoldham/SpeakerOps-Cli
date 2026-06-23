@@ -2,9 +2,9 @@
 
 SpeakerOps is a minimal Python CLI for helping technical speakers turn rough talk ideas into useful conference artefacts: ideation notes, research notes, CFP submissions, talk outlines, and review summaries.
 
-SpeakerOps started as an early unsafe MVP without filesystem restrictions, path allowlisting, network allowlisting, approval gates, audit logging, sandboxing, or tool restrictions. Those controls are expected to be added incrementally in later security-focused stages.
+SpeakerOps started as an unsafe MVP, but now includes staged safety controls for local, file-based talk generation.
 
-Stage 2 adds workspace boundary protection so talk operations are restricted to the selected talk folder.
+The current stage is an early safety-focused MVP: talk operations are restricted to the selected workspace, generated writes are reviewed before applying, network access is allowlisted, untrusted content is wrapped, generated artefacts are scanned for secrets, and provenance records are written for approved generated content.
 
 For detailed day-to-day usage, see [USERGUIDE.md](USERGUIDE.md).
 
@@ -156,6 +156,12 @@ Generated artefacts are written to `.preview` files first. SpeakerOps shows the 
 
 SpeakerOps treats configuration, policy, talk metadata, built-in prompts, and user commands as trusted instructions. Web results, research notes, imported Markdown, copied CFP pages, downloaded pages, and uploaded documents are treated as untrusted source material, wrapped before model use, and logged in the audit log.
 
+## Hardened controls
+
+SpeakerOps loads a `security` policy from `.speakerops/speakerops.yaml`. The default profile enables generated-content secret scanning and provenance records. You can optionally restrict talk operations to named local operators with `security.allowed_operators`; by default the local operating-system user is logged but not restricted.
+
+Approved generated artefacts append provenance records to `provenance.yaml` in the talk workspace. Records include the timestamp, local operator, action, target artefact, generated content hash, and input file hashes.
+
 ## License
 
 SpeakerOps is licensed under the MIT License. See [LICENSE](LICENSE).
@@ -166,7 +172,8 @@ SpeakerOps tracks content sources as trusted or untrusted using simple rules. Ru
 
 ## Current limitations
 
-- This is intentionally permissive and unsafe.
+- This is a local single-user CLI, not a hardened multi-user agent platform.
 - Research uses a basic web-search abstraction and may fall back to placeholder references.
 - The LLM abstraction is deliberately simple and file-based; Markdown files are the memory.
 - There is no GitHub integration, publishing, slide generation, database, vector search, plugin architecture, or multi-agent framework.
+- There is no OS-level sandbox or remote identity provider; hardening is enforced through local policy, bounded built-in tools, review-before-write, audit logs, secret scanning, and provenance.
