@@ -1,21 +1,21 @@
-name: George Coldham
-role: Cloud Security Architect
+name: Your Name
+role: Your Role
 
 bio:
-  short: Cloud security architect focused on practical security, Zero Trust, and AI security.
-  perspective: I care about making complex security ideas understandable, useful, and grounded in real-world constraints.
+  short: Add a one-line introduction for your speaking profile.
+  perspective: Describe how you approach technical talks and practical trade-offs.
 
 interests:
   primary:
     - Zero Trust
     - AI Security
-    - Agentic Applications
-    - Cloud Security Architecture
+    - Platform Engineering
+    - Developer Experience
   secondary:
-    - Developer experience
     - Open source tooling
     - Community speaking
-    - Microsoft security ecosystem
+    - Software architecture
+    - Incident response
 
 audience_preferences:
   preferred_audiences:
@@ -48,12 +48,12 @@ speaking_style:
 
 point_of_view:
   - Security should enable delivery, not block it.
-  - Agentic systems need boring controls before exciting autonomy.
-  - The workflow is often more important than the model.
-  - Files, Git, and reviewability are underrated security controls.
+  - Focus on practical lessons people can apply this week.
+  - Explain trade-offs and assumptions clearly.
+  - Keep examples concrete and reproducible.
 
-model_provider: github_models
-model: openai/gpt-5-nano
+model_provider: local
+model: local-draft
 
 network:
   mode: allowlist

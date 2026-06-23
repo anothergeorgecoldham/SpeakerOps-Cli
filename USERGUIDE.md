@@ -18,7 +18,10 @@ python -m pip install -e .
 speakerops init
 ```
 
-`speakerops init` creates `.speakerops/speakerops.yaml` and `talks/`.
+`speakerops init` runs a profile setup wizard, then creates `.speakerops/speakerops.yaml`
+and `talks/`.
+Use `speakerops init --non-interactive` when you need default values for demos,
+automation, or CI.
 
 `speakerops --help`, `speakerops init`, and `speakerops config` show the
 SpeakerOps banner with a cyan-to-magenta terminal gradient when colour output is

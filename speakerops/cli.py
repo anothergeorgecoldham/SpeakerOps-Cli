@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from difflib import unified_diff
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from rich.table import Table
 from speakerops import __version__
 from speakerops.audit import AuditLogger
 from speakerops.approval import ApprovalGate
-from speakerops.config import current_talk_path, init_profile, load_profile, model_settings, profile_path, project_root, save_profile, set_current_talk
+from speakerops.config import current_talk_path, default_profile, init_profile, load_profile, model_settings, profile_path, project_root, save_profile, set_current_talk
 from speakerops.content import ContentSource, TrustLevel, content_source, prepare_content
 from speakerops.files import (
     initial_markdown,
@@ -70,13 +71,99 @@ def _print_banner() -> None:
 
 
 @app.command()
-def init() -> None:
+def init(non_interactive: bool = typer.Option(False, "--non-interactive", help="Skip prompts and write default profile values.")) -> None:
     """Initialise SpeakerOps in the current directory."""
     _print_banner()
-    path = init_profile()
+    profile = default_profile()
+    interactive = not non_interactive and sys.stdin.isatty()
+    if not non_interactive and not interactive:
+        console.print("[yellow]Non-interactive terminal detected; using default profile values.[/yellow]")
+    if interactive:
+        console.print("[bold]Profile setup wizard[/bold]")
+        profile["name"] = typer.prompt("Speaker name", default=str(profile.get("name", "")))
+        profile["role"] = typer.prompt("Speaker role", default=str(profile.get("role", "")))
+        bio = profile.setdefault("bio", {})
+        if isinstance(bio, dict):
+            bio["short"] = typer.prompt("Short bio", default=str(bio.get("short", "")))
+            bio["perspective"] = typer.prompt("Perspective", default=str(bio.get("perspective", "")))
+        interests = profile.setdefault("interests", {})
+        if isinstance(interests, dict):
+            interests["primary"] = _prompt_list("Primary interests (comma-separated)", interests.get("primary"))
+        audience = profile.setdefault("audience_preferences", {})
+        if isinstance(audience, dict):
+            audience["preferred_audiences"] = _prompt_list("Preferred audiences (comma-separated)", audience.get("preferred_audiences"))
+        previous_provider = _normalize_model_provider(str(profile.get("model_provider", "local"))) or "local"
+        provider = _prompt_model_provider(str(profile.get("model_provider", "local")))
+        profile["model_provider"] = provider
+        profile["model"] = typer.prompt(
+            "Model name",
+            default=_default_model_for_provider(provider, str(profile.get("model", "")), previous_provider),
+        )
+
+    path = init_profile(profile)
     console.print("[bold green]Initialised SpeakerOps[/bold green]")
     console.print(f"Profile: {path}")
     console.print("Created: talks/")
+    _print_model_setup_guidance(str(profile.get("model_provider", "local")), str(profile.get("model", "")))
+
+
+def _prompt_list(label: str, current: object) -> list[str]:
+    defaults = ", ".join(current) if isinstance(current, list) else ""
+    response = typer.prompt(label, default=defaults)
+    return [item.strip() for item in response.split(",") if item.strip()]
+
+
+def _normalize_model_provider(provider: str) -> str:
+    normalized = provider.strip().lower()
+    aliases = {
+        "github": "github_models",
+        "github-models": "github_models",
+        "github_models": "github_models",
+        "openai": "openai",
+        "local": "local",
+        "local-draft": "local",
+    }
+    return aliases.get(normalized, "")
+
+
+def _prompt_model_provider(default: str) -> str:
+    fallback = _normalize_model_provider(default) or "local"
+    while True:
+        response = typer.prompt("Model provider [local/openai/github_models]", default=fallback)
+        provider = _normalize_model_provider(response)
+        if provider:
+            return provider
+        console.print("[red]Please choose one of: local, openai, github_models.[/red]")
+
+
+def _default_model_for_provider(provider: str, current_model: str, previous_provider: str | None = None) -> str:
+    defaults = {
+        "github_models": "openai/gpt-5-nano",
+        "openai": "gpt-4o-mini",
+        "local": "local-draft",
+    }
+    existing = current_model.strip()
+    if existing:
+        if previous_provider and existing == defaults.get(previous_provider):
+            return defaults.get(provider, "local-draft")
+        return existing
+    return defaults.get(provider, "local-draft")
+
+
+def _print_model_setup_guidance(provider: str, model: str) -> None:
+    console.print()
+    console.print("[bold]Model setup guidance[/bold]")
+    console.print(f"- Provider: {provider}")
+    console.print(f"- Model: {model}")
+    if provider == "github_models":
+        console.print("- Set [bold]GITHUB_TOKEN[/bold] in your environment before running generation commands.")
+        console.print("- You can override provider/model with SPEAKEROPS_MODEL_PROVIDER and SPEAKEROPS_MODEL.")
+    elif provider == "openai":
+        console.print("- Set [bold]OPENAI_API_KEY[/bold] or create an [bold]api.key[/bold] file at the project root.")
+        console.print("- You can override provider/model with SPEAKEROPS_MODEL_PROVIDER and SPEAKEROPS_MODEL.")
+    else:
+        console.print("- Local draft mode needs no API keys and works for demos, automation, and CI.")
+        console.print("- Run [bold]speakerops config --model-provider ... --model ...[/bold] when you are ready for a hosted model.")
 
 
 @app.command(name="config")

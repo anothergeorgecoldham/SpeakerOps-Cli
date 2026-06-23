@@ -56,7 +56,8 @@ to list the available chat commands.
 
 ## Configuration
 
-`speakerops init` creates `.speakerops/speakerops.yaml`. The profile stores speaker details, interests, preferred audiences, tone, speaking style, and model settings.
+`speakerops init` now opens a short setup wizard to capture your speaker details and model provider/model choices, then writes `.speakerops/speakerops.yaml`.
+Use `speakerops init --non-interactive` to write default values for demos, automation, or CI.
 
 Model settings can also be supplied with environment variables:
 

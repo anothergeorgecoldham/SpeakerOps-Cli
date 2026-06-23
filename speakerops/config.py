@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from speakerops.files import read_template, read_yaml, write_text, write_yaml
+import yaml
+
+from speakerops.files import read_template, read_yaml, write_yaml
 
 
 CONFIG_DIR = ".speakerops"
@@ -32,10 +34,17 @@ def project_root(start_path: Path | None = None) -> Path:
     return start
 
 
-def init_profile(base_path: Path | None = None) -> Path:
+def default_profile() -> dict[str, Any]:
+    data = yaml.safe_load(read_template("profile.yaml")) or {}
+    if not isinstance(data, dict):
+        raise ValueError("Expected profile template to be a YAML mapping.")
+    return data
+
+
+def init_profile(profile: dict[str, Any] | None = None, base_path: Path | None = None) -> Path:
     root = base_path or project_root()
     target = profile_path(root)
-    write_text(target, read_template("profile.yaml"))
+    write_yaml(target, profile or default_profile())
     (root / "talks").mkdir(parents=True, exist_ok=True)
     return target
 
