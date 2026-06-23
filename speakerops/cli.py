@@ -5,12 +5,13 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from speakerops import __version__
 from speakerops.audit import AuditLogger
 from speakerops.approval import ApprovalGate
-from speakerops.config import init_profile, load_profile, model_settings, profile_path
+from speakerops.config import current_talk_path, init_profile, load_profile, model_settings, profile_path, project_root, save_profile, set_current_talk
 from speakerops.content import ContentSource, TrustLevel, content_source, prepare_content
 from speakerops.files import (
     initial_markdown,
@@ -22,7 +23,7 @@ from speakerops.files import (
     write_text,
     write_yaml,
 )
-from speakerops.llm import create_llm_client
+from speakerops.llm import check_llm_connection, create_llm_client
 from speakerops.network import NetworkPolicy, NetworkPolicyViolation
 from speakerops.prompts import chat_prompt, cfp_prompt, context_block, outline_prompt, research_prompt, review_prompt, system_prompt
 from speakerops.tools import ToolAllowlist, ToolNotAllowed
@@ -30,8 +31,18 @@ from speakerops.web import denied_results, DuckDuckGoSearchClient, format_result
 
 
 DEFAULT_DENIED_PATHS = [".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519", ".ssh/*", ".git/config", ".git-credentials"]
+BANNER = """[cyan]  ____________[/cyan]  [bright_cyan]███████╗[/bright_cyan][cyan]██████╗ [/cyan][blue]███████╗[/blue][bright_blue] █████╗ [/bright_blue][purple]██╗  ██╗[/purple][magenta]███████╗[/magenta][bright_magenta]██████╗ [/bright_magenta][magenta] ██████╗ ██████╗ ███████╗[/magenta]
+[cyan] |  ________  |[/cyan] [bright_cyan]██╔════╝[/bright_cyan][cyan]██╔══██╗[/cyan][blue]██╔════╝[/blue][bright_blue]██╔══██╗[/bright_blue][purple]██║ ██╔╝[/purple][magenta]██╔════╝[/magenta][bright_magenta]██╔══██╗[/bright_magenta][magenta]██╔═══██╗██╔══██╗██╔════╝[/magenta]
+[cyan] | |  (  )  | |[/cyan] [bright_cyan]███████╗[/bright_cyan][cyan]██████╔╝[/cyan][blue]█████╗  [/blue][bright_blue]███████║[/bright_blue][purple]█████╔╝ [/purple][magenta]█████╗  [/magenta][bright_magenta]██████╔╝[/bright_magenta][magenta]██║   ██║██████╔╝███████╗[/magenta]
+[cyan] | |  (__)  | |[/cyan] [bright_cyan]╚════██║[/bright_cyan][cyan]██╔═══╝ [/cyan][blue]██╔══╝  [/blue][bright_blue]██╔══██║[/bright_blue][purple]██╔═██╗ [/purple][magenta]██╔══╝  [/magenta][bright_magenta]██╔══██╗[/bright_magenta][magenta]██║   ██║██╔═══╝ ╚════██║[/magenta]
+[cyan] | |________| |[/cyan] [bright_cyan]███████║[/bright_cyan][cyan]██║     [/cyan][blue]███████╗[/blue][bright_blue]██║  ██║[/bright_blue][purple]██║  ██╗[/purple][magenta]███████╗[/magenta][bright_magenta]██║  ██║[/bright_magenta][magenta]╚██████╔╝██║     ███████║[/magenta]
+[cyan] |____________|[/cyan] [bright_cyan]╚══════╝[/bright_cyan][cyan]╚═╝     [/cyan][blue]╚══════╝[/blue][bright_blue]╚═╝  ╚═╝[/bright_blue][purple]╚═╝  ╚═╝[/purple][magenta]╚══════╝[/magenta][bright_magenta]╚═╝  ╚═╝[/bright_magenta][magenta] ╚═════╝ ╚═╝     ╚══════╝[/magenta]
+[dim]Talk ideas -> research -> CFP -> outline -> review[/dim]"""
 
-app = typer.Typer(help="SpeakerOps unsafe MVP CLI.")
+app = typer.Typer(
+    help=f"\b\n{BANNER}\n\nSpeakerOps unsafe MVP CLI.",
+    rich_markup_mode="rich",
+)
 generate_app = typer.Typer(help="Generate talk artefacts.")
 demo_app = typer.Typer(help="Demonstrate SpeakerOps safety controls.")
 app.add_typer(generate_app, name="generate")
@@ -46,9 +57,15 @@ def main(version: bool = typer.Option(False, "--version", help="Show version and
         raise typer.Exit()
 
 
+def _print_banner() -> None:
+    console.print(BANNER)
+    console.print()
+
+
 @app.command()
 def init() -> None:
     """Initialise SpeakerOps in the current directory."""
+    _print_banner()
     path = init_profile()
     console.print("[bold green]Initialised SpeakerOps[/bold green]")
     console.print(f"Profile: {path}")
@@ -56,10 +73,35 @@ def init() -> None:
 
 
 @app.command(name="config")
-def config_command() -> None:
-    """Print the loaded profile and model settings."""
+def config_command(
+    use_openai: bool = typer.Option(False, "--use-openai", help="Configure OpenAI as the model provider. Defaults to gpt-4o-mini unless --model is supplied."),
+    model_provider: str = typer.Option("", "--model-provider", help="Update the configured model provider."),
+    model: str = typer.Option("", "--model", help="Update the configured model."),
+    test_api: bool = typer.Option(False, "--test-api", help="Test the configured model provider and credentials."),
+) -> None:
+    """Print or update the loaded profile and model settings."""
+    _print_banner()
     profile = _profile_or_exit()
+    if use_openai:
+        if model_provider and model_provider != "openai":
+            console.print("[red]--use-openai cannot be combined with a different --model-provider.[/red]")
+            raise typer.Exit(1)
+        model_provider = "openai"
+        model = model or "gpt-4o-mini"
+    if model_provider or model:
+        if model_provider:
+            profile["model_provider"] = model_provider
+        if model:
+            profile["model"] = model
+        save_profile(profile)
+        console.print("[bold green]Updated SpeakerOps configuration[/bold green]")
     settings = model_settings(profile)
+    if test_api:
+        check = check_llm_connection(settings.provider, settings.model)
+        style = "green" if check.ok else "red"
+        console.print(f"[{style}]{check.message}[/{style}]")
+        if not check.ok:
+            raise typer.Exit(1)
 
     table = Table(title="SpeakerOps configuration")
     table.add_column("Setting")
@@ -67,6 +109,7 @@ def config_command() -> None:
     table.add_row("Profile path", str(profile_path()))
     table.add_row("Speaker name", str(profile.get("name", "")))
     table.add_row("Role", str(profile.get("role", "")))
+    table.add_row("Current talk", str(current_talk_path(profile) or ""))
     table.add_row("Model provider", settings.provider)
     table.add_row("Model", settings.model)
     primary = profile.get("interests", {}).get("primary", [])
@@ -82,8 +125,9 @@ def new(
     duration: int = typer.Option(30, "--duration", "-d", help="Talk duration in minutes."),
 ) -> None:
     """Create a new talk workspace."""
+    root = project_root()
     slug = slugify(title)
-    talk_dir = Path("talks") / slug
+    talk_dir = root / "talks" / slug
     talk_dir.mkdir(parents=True, exist_ok=True)
 
     talk = {
@@ -99,28 +143,44 @@ def new(
     write_yaml(talk_dir / "talk.yaml", talk)
     for name, content in initial_markdown(title).items():
         write_text(talk_dir / name, content)
+    try:
+        current_talk = set_current_talk(talk_dir)
+    except FileNotFoundError:
+        current_talk = talk_dir
 
     console.print("[bold green]Created talk workspace:[/bold green]")
-    console.print(str(talk_dir))
+    console.print(_display_path(talk_dir))
+    console.print(f"Current talk: {current_talk}")
     console.print("Generated: talk.yaml, idea.md, research.md, cfp.md, outline.md, review.md")
 
 
+@app.command(name="use")
+def use_talk(talk_path: Path) -> None:
+    """Set the current talk workspace."""
+    profile = _profile_or_exit()
+    resolved = _resolve_talk_path(talk_path, profile)
+    _talk_or_exit(resolved, profile)
+    current_talk = set_current_talk(resolved)
+    console.print(f"[bold green]Current talk:[/bold green] {current_talk}")
+
+
 @app.command()
-def chat(talk_path: Path) -> None:
+def chat(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
     """Start an interactive ideation session for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path, profile)
+    talk, markdown, tools = _talk_or_exit(_resolve_talk_path(talk_path, profile), profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     transcript: list[str] = []
 
     console.print("[bold green]SpeakerOps chat started.[/bold green]")
     console.print("Type /save to save notes.")
+    console.print("Type /help to list chat commands.")
     console.print("Type /exit to quit.")
 
     while True:
         try:
-            message = input("you> ").strip()
+            message = console.input(_chat_prompt(talk)).strip()
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
@@ -128,33 +188,75 @@ def chat(talk_path: Path) -> None:
             continue
         if message == "/exit":
             break
+        if message == "/help":
+            _print_chat_help()
+            continue
         if message == "/context":
             _print_context_summary(profile, talk, markdown)
             continue
         if message == "/save":
             summary_prompt = "Summarize the useful outcomes from this session as concise Markdown notes."
-            summary = llm.complete(system_prompt(), chat_prompt(context_block(profile, talk, markdown, tools.audit_logger), "\n".join(transcript), summary_prompt))
+            with console.status("[bold green]Thinking...[/bold green]"):
+                summary = llm.complete(system_prompt(), chat_prompt(context_block(profile, talk, markdown, tools.audit_logger), "\n".join(transcript), summary_prompt))
             saved_at = utc_timestamp()
             notes = f"\n\n## Chat Notes - {saved_at}\n\n{summary}\n"
             tools.execute("write_talk_file", "idea.md", notes, append=True)
             markdown["idea.md"] = markdown.get("idea.md", "") + notes
             console.print("[green]Saved session notes to idea.md[/green]")
             continue
+        if message == "/research":
+            _run_research(profile, talk, markdown, llm, tools)
+            continue
+        if message in {"/cfp", "/generate cfp"}:
+            _generate_cfp(profile, talk, markdown, llm, tools)
+            continue
+        if message in {"/outline", "/generate outline"}:
+            _generate_outline(profile, talk, markdown, llm, tools)
+            continue
+        if message == "/review":
+            _run_review(profile, talk, markdown, llm, tools)
+            continue
 
         context = context_block(profile, talk, markdown, tools.audit_logger)
         trusted_message = prepare_content("user_command", message, tools.audit_logger)
-        response = llm.complete(system_prompt(), chat_prompt(context, "\n".join(transcript), trusted_message))
+        with console.status("[bold green]Thinking...[/bold green]"):
+            response = llm.complete(system_prompt(), chat_prompt(context, "\n".join(transcript), trusted_message))
         transcript.extend([f"you: {message}", f"assistant: {response}"])
-        console.print(f"assistant> {response}")
+        console.print(f"[bold magenta]speakerops[/bold magenta]> {response}")
 
 
 @app.command()
-def research(talk_path: Path) -> None:
+def research(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
     """Gather supporting research for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path, profile)
+    talk, markdown, tools = _talk_or_exit(_resolve_talk_path(talk_path, profile), profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
+    _run_research(profile, talk, markdown, llm, tools)
+
+
+@generate_app.command()
+def cfp(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
+    """Generate or update cfp.md."""
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+    _generate_cfp(profile, talk, markdown, llm, tools)
+
+
+@generate_app.command()
+def outline(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
+    """Generate or update outline.md."""
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+    _generate_outline(profile, talk, markdown, llm, tools)
+
+
+@app.command()
+def review(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
+    """Review the current talk package."""
+    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+    _run_review(profile, talk, markdown, llm, tools)
+
+
+def _run_research(profile: dict, talk: dict, markdown: dict[str, str], llm, tools: ToolAllowlist) -> bool:
     query = " ".join(
         part
         for part in [
@@ -175,53 +277,52 @@ def research(talk_path: Path) -> None:
     content = llm.complete(system_prompt(), research_prompt(context_block(profile, talk, markdown, tools.audit_logger), search_notes))
     if not tools.execute("run_research", "research.md", content):
         console.print("[yellow]Skipped:[/yellow] research.md")
-        return
+        return False
+    markdown["research.md"] = content
     console.print("[bold green]Generated:[/bold green] research.md")
+    return True
 
 
-@generate_app.command()
-def cfp(talk_path: Path) -> None:
-    """Generate or update cfp.md."""
-    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+def _generate_cfp(profile: dict, talk: dict, markdown: dict[str, str], llm, tools: ToolAllowlist) -> bool:
     content = llm.complete(system_prompt(), cfp_prompt(context_block(profile, talk, markdown, tools.audit_logger)))
     if not tools.execute("generate_cfp", "cfp.md", content):
         console.print("[yellow]Skipped:[/yellow] cfp.md")
-        return
+        return False
+    markdown["cfp.md"] = content
     console.print("[bold green]Generated:[/bold green] cfp.md")
+    return True
 
 
-@generate_app.command()
-def outline(talk_path: Path) -> None:
-    """Generate or update outline.md."""
-    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+def _generate_outline(profile: dict, talk: dict, markdown: dict[str, str], llm, tools: ToolAllowlist) -> bool:
     content = llm.complete(system_prompt(), outline_prompt(context_block(profile, talk, markdown, tools.audit_logger)))
     if not tools.execute("generate_outline", "outline.md", content):
         console.print("[yellow]Skipped:[/yellow] outline.md")
-        return
+        return False
+    markdown["outline.md"] = content
     console.print("[bold green]Generated:[/bold green] outline.md")
+    return True
 
 
-@app.command()
-def review(talk_path: Path) -> None:
-    """Review the current talk package."""
-    profile, talk, markdown, llm, tools = _generation_inputs(talk_path)
+def _run_review(profile: dict, talk: dict, markdown: dict[str, str], llm, tools: ToolAllowlist) -> bool:
     content = llm.complete(system_prompt(), review_prompt(context_block(profile, talk, markdown, tools.audit_logger)))
     if not tools.execute("run_review", "review.md", content):
         console.print("[yellow]Skipped:[/yellow] review.md")
         _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
-        return
+        return False
+    markdown["review.md"] = content
     console.print("[bold green]Generated:[/bold green] review.md")
     summary = _first_non_empty_lines(content, count=4)
     if summary:
         console.print("\n".join(summary))
     _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
+    return True
 
 
 @app.command()
-def trust(talk_path: Path) -> None:
+def trust(talk_path: Path | None = typer.Argument(None, help="Talk workspace. Defaults to the current talk.")) -> None:
     """Display trust classification for a talk."""
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path, profile)
+    talk, markdown, tools = _talk_or_exit(_resolve_talk_path(talk_path, profile), profile)
     _print_trust_summary(_trust_sources(profile, talk, markdown, tools.audit_logger))
 
 
@@ -238,9 +339,9 @@ def demo_prompt_injection() -> None:
     console.print(wrapped)
 
 
-def _generation_inputs(talk_path: Path):
+def _generation_inputs(talk_path: Path | None):
     profile = _profile_or_exit()
-    talk, markdown, tools = _talk_or_exit(talk_path, profile)
+    talk, markdown, tools = _talk_or_exit(_resolve_talk_path(talk_path, profile), profile)
     settings = model_settings(profile)
     llm = create_llm_client(settings.provider, settings.model)
     return profile, talk, markdown, llm, tools
@@ -252,6 +353,30 @@ def _profile_or_exit() -> dict:
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
+
+
+def _resolve_talk_path(talk_path: Path | None, profile: dict) -> Path:
+    root = project_root()
+    selected = talk_path or current_talk_path(profile)
+    if selected is None:
+        console.print("[red]No current talk selected. Pass a talk path or run 'speakerops use <talk-folder>'.[/red]")
+        raise typer.Exit(1)
+    if selected.is_absolute():
+        return selected
+    root_candidate = root / selected
+    if root_candidate.exists() or selected.parent != Path("."):
+        return root_candidate
+    talks_candidate = root / "talks" / selected
+    if talks_candidate.exists():
+        return talks_candidate
+    return root_candidate
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return path.resolve(strict=False).relative_to(project_root().resolve(strict=False)).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _talk_or_exit(talk_path: Path, profile: dict):
@@ -328,6 +453,28 @@ def _print_context_summary(profile: dict, talk: dict, markdown: dict[str, str]) 
     console.print(f"Talk: {talk.get('title', '')}")
     for name, content in markdown.items():
         console.print(f"{name}: {len(content)} characters")
+
+
+def _print_chat_help() -> None:
+    console.print("[bold]Chat commands[/bold]")
+    console.print("/context - show loaded talk context")
+    console.print("/save - summarize this chat into idea.md")
+    console.print("/research - generate research.md")
+    console.print("/cfp - generate cfp.md")
+    console.print("/outline - generate outline.md")
+    console.print("/review - generate review.md")
+    console.print("/exit - quit chat")
+
+
+def _chat_prompt(talk: dict) -> str:
+    slug = str(talk.get("slug") or slugify(str(talk.get("title") or "talk")))
+    status = str(talk.get("status") or "idea")
+    return (
+        f"[bold cyan] speakerops [/bold cyan]"
+        f"[bold blue] {escape(slug)} [/bold blue]"
+        f"[bold magenta] {escape(status)} [/bold magenta]"
+        "[bold white] you [/bold white] "
+    )
 
 
 def _first_non_empty_lines(content: str, count: int) -> list[str]:

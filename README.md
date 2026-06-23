@@ -6,34 +6,52 @@ SpeakerOps started as an early unsafe MVP without filesystem restrictions, path 
 
 Stage 2 adds workspace boundary protection so talk operations are restricted to the selected talk folder.
 
+For detailed day-to-day usage, see [USERGUIDE.md](USERGUIDE.md).
+
 ## Install
 
 Requires Python 3.11 or later.
 
+Create and activate a virtual environment first. This avoids the
+`externally-managed-environment` error from Homebrew-managed Python on macOS.
+
 ```bash
-pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
+
+On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`
+before running `python -m pip install -e .`.
 
 ## Quickstart
 
 ```bash
 speakerops init
 speakerops new "Securing Your First Agentic CLI"
-speakerops chat talks/securing-your-first-agentic-cli
-speakerops research talks/securing-your-first-agentic-cli
-speakerops generate cfp talks/securing-your-first-agentic-cli
-speakerops generate outline talks/securing-your-first-agentic-cli
-speakerops review talks/securing-your-first-agentic-cli
+speakerops chat
+speakerops research
+speakerops generate cfp
+speakerops generate outline
+speakerops review
 ```
 
 ## Example workflow
 
 1. Initialise a local profile with `speakerops init`.
-2. Create a talk workspace with `speakerops new "Talk Title" --conference NDC --audience "security engineers" --duration 30`.
-3. Use `speakerops chat <talk-folder>` to explore the idea and save useful notes to `idea.md`.
-4. Run `speakerops research <talk-folder>` to populate `research.md`.
-5. Generate a CFP and outline with `speakerops generate cfp <talk-folder>` and `speakerops generate outline <talk-folder>`.
-6. Review the current package with `speakerops review <talk-folder>`.
+2. Create a talk workspace with `speakerops new "Talk Title" --conference NDC --audience "security engineers" --duration 30`. New talks become the current talk automatically.
+3. Use `speakerops chat` to explore the idea and save useful notes to `idea.md`.
+4. Run `speakerops research` to populate `research.md`.
+5. Generate a CFP and outline with `speakerops generate cfp` and `speakerops generate outline`.
+6. Review the current package with `speakerops review`.
+
+Talk commands default to the current talk stored in `.speakerops/speakerops.yaml`.
+Pass a talk path when you want to work on a different talk, or run
+`speakerops use <talk-folder>` to switch the current talk.
+
+Inside `speakerops chat`, use `/research`, `/cfp`, `/outline`, or `/review` to
+create the same artefacts without leaving the conversation. Use `/help` in chat
+to list the available chat commands.
 
 ## Configuration
 
@@ -72,21 +90,40 @@ $env:SPEAKEROPS_MODEL="openai/gpt-5-nano"
 1. Create or sign in to an OpenAI account: <https://platform.openai.com/>
 2. Create an API key: <https://platform.openai.com/api-keys>
 3. Check model availability and pricing before use: <https://platform.openai.com/docs/models>
-4. Set the environment variables:
+4. Configure SpeakerOps to use OpenAI:
+
+```bash
+speakerops config --use-openai
+```
+
+Then provide the API key with either an environment variable:
+
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+```
+
+or put the key in `api.key` at the project root:
+
+```bash
+printf '%s\n' "your-openai-api-key" > api.key
+```
+
+`api.key` is ignored by Git. You can choose a different OpenAI model with
+`speakerops config --use-openai --model <model-name>`.
+
+Environment variables still override the YAML config:
 
 ```powershell
-$env:OPENAI_API_KEY="your-openai-api-key"
 $env:SPEAKEROPS_MODEL_PROVIDER="openai"
 $env:SPEAKEROPS_MODEL="gpt-4o-mini"
 ```
-
-Alternatively, put the OpenAI API key in `api.key` at the project root. This file is ignored by Git.
 
 ### Check the active settings
 
 ```powershell
 speakerops config
-speakerops generate cfp talks\securing-your-first-agentic-cli
+speakerops config --test-api
+speakerops generate cfp
 ```
 
 Do not commit API keys or store them in generated talk files.

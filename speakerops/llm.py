@@ -8,10 +8,18 @@ from typing import Any, Protocol
 
 import requests
 
+from speakerops.config import project_root
+
 
 class LLMClient(Protocol):
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         ...
+
+
+@dataclass(frozen=True)
+class LLMConnectionCheck:
+    ok: bool
+    message: str
 
 
 @dataclass
@@ -31,8 +39,8 @@ class LocalDraftLLMClient:
         if "summarize" in lowered:
             return "The session explored the talk narrative, target audience, practical examples, and next artefacts to refine."
         return (
-            "That gives you a useful talk thread: start with the practical problem, show the naive workflow, "
-            "make the trade-offs visible, then turn the lesson into concrete patterns the audience can reuse."
+            "That sounds like a useful starting point. What audience do you want to shape it for first: "
+            "security architects, platform engineers, developers, or a broader community audience?"
         )
 
 
@@ -51,7 +59,6 @@ class ChatCompletionsClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.4,
         }
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         try:
@@ -92,12 +99,76 @@ def create_llm_client(provider: str, model: str) -> LLMClient:
     return fallback
 
 
+def check_llm_connection(provider: str, model: str) -> LLMConnectionCheck:
+    normalized = provider.lower().strip()
+    if normalized in {"", "local", "local-draft"}:
+        return LLMConnectionCheck(True, "Using local draft fallback; no API key is required.")
+
+    endpoint = ""
+    token = ""
+    display_provider = provider
+    if normalized in {"github", "github_models", "github-models"}:
+        display_provider = "github_models"
+        endpoint = "https://models.github.ai/inference/chat/completions"
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if not token:
+            return LLMConnectionCheck(False, "GITHUB_TOKEN is not set.")
+    elif normalized == "openai":
+        display_provider = "openai"
+        endpoint = "https://api.openai.com/v1/chat/completions"
+        token = _openai_api_key() or ""
+        if not token:
+            return LLMConnectionCheck(False, "OPENAI_API_KEY is not set and api.key was not found at the project root.")
+    else:
+        return LLMConnectionCheck(False, f"Unknown model provider '{provider}'.")
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a connection health check."},
+            {"role": "user", "content": "Reply with OK."},
+        ],
+    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+    except requests.HTTPError as exc:
+        return LLMConnectionCheck(False, f"{display_provider} API check failed: {_http_error_message(exc)}")
+    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as exc:
+        return LLMConnectionCheck(False, f"{display_provider} API check failed: {exc}")
+    if not isinstance(content, str) or not content.strip():
+        return LLMConnectionCheck(False, f"{display_provider} API check returned an empty response.")
+    return LLMConnectionCheck(True, f"{display_provider} API check succeeded with model {model}.")
+
+
+def _http_error_message(exc: requests.HTTPError) -> str:
+    response = exc.response
+    if response is None:
+        return str(exc)
+    try:
+        data = response.json()
+        error = data.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if message:
+                return f"{response.status_code} {message}"
+    except ValueError:
+        pass
+    body = response.text.strip()
+    if body:
+        return f"{response.status_code} {body[:500]}"
+    return str(exc)
+
+
 def _openai_api_key() -> str | None:
     token = os.getenv("OPENAI_API_KEY")
     if token and token.strip():
         return token.strip()
 
-    key_path = Path("api.key")
+    key_path = project_root() / "api.key"
     if key_path.exists():
         file_token = key_path.read_text(encoding="utf-8").strip()
         if file_token:
