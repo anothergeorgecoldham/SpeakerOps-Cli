@@ -6,7 +6,8 @@ SpeakerOps started as an unsafe MVP, but now includes staged safety controls for
 
 The current stage is an early safety-focused MVP: talk operations are restricted to the selected workspace, generated writes are reviewed before applying, network access is allowlisted, untrusted content is wrapped, generated artefacts are scanned for secrets, and provenance records are written for approved generated content.
 
-For detailed day-to-day usage, see [USERGUIDE.md](USERGUIDE.md).
+For detailed day-to-day usage, see [USERGUIDE.md](USERGUIDE.md). For the
+stage-by-stage safety narrative, see [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## Install
 

@@ -4,6 +4,9 @@ SpeakerOps helps turn a rough talk idea into a file-based talk workspace. The
 main workflow is: create a profile, create a talk, discuss the idea, then
 generate research notes, CFP copy, an outline, and a review.
 
+For the stage-by-stage safety history behind the project, see
+[RELEASE_NOTES.md](RELEASE_NOTES.md).
+
 ## Install and initialise
 
 From the repository root:
