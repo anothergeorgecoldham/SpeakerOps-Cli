@@ -13,6 +13,7 @@ env/
 # Local SpeakerOps runtime state
 .speakerops/
 talks/
+AgentCon/
 
 # Local environment files
 .env

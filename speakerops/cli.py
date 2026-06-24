@@ -49,6 +49,7 @@ BANNER = """[cyan]  ____________[/cyan]  [bright_cyan]███████╗[/
 app = typer.Typer(
     help=f"\b\n{BANNER}\n\nSpeakerOps unsafe MVP CLI.",
     rich_markup_mode="rich",
+    invoke_without_command=True,
 )
 generate_app = typer.Typer(help="Generate talk artefacts.")
 demo_app = typer.Typer(help="Demonstrate SpeakerOps safety controls.")
